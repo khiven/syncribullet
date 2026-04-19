@@ -42,6 +42,7 @@ lerna-debug.log*
 !.yarn/releases
 
 # ENV
+.env
 .env.local
 
 # Sentry Config File
