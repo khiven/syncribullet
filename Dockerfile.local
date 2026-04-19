@@ -80,7 +80,7 @@ ENTRYPOINT ["/bin/sh", "-c", " \
     if [ \"$SHOW_PRIVATE_ENCRYPTION_KEY\" = \"true\" ]; then \
         echo \"$MSG: $PRIVATE_ENCRYPTION_KEY\"; \
     fi; \
-    exec npm run start:local \
+    exec npm run serve \
 "]
 
 # --- Build examples ---
