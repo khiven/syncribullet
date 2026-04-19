@@ -3,6 +3,8 @@ import { axiosInstance } from '~/utils/axios/cache';
 import { TVTimeCatalogType } from '../types/catalog/catalog-type';
 import type { TVTimeUserSettings } from '../types/user-settings';
 import { createTVTimeHeaders } from './headers';
+import { logTVTime } from './log';
+import { withTVTimeRefresh } from './refresh';
 import { TVTIME_BASE_URL } from './url';
 
 export const syncTVTimeMetaObject = async (
@@ -21,30 +23,31 @@ export const syncTVTimeMetaObject = async (
   const url = `${TVTIME_BASE_URL}?${fields.join('&')}`;
 
   try {
-    const response = await axiosInstance(url, {
-      method: 'POST',
-      headers: createTVTimeHeaders(userConfig.auth),
+    await withTVTimeRefresh(userConfig, 'sync', async (auth) => {
+      const response = await axiosInstance(url, {
+        method: 'POST',
+        headers: createTVTimeHeaders(auth),
+      });
+      logTVTime('info', 'sync', {
+        type,
+        id,
+        episode: edisodeId,
+        status: response.status,
+      });
     });
-
-    if (response.status >= 200 && response.status < 300) {
-      try {
-        return await response.data;
-      } catch {
-        return;
-      }
-    } else {
-      if (response.statusText)
-        throw new Error(
-          `TVTime Api returned with a ${response.status} status. ${response.statusText}`,
-        );
-      throw new Error(
-        `TVTime Api returned with a ${response.status} status. The api might be down!`,
-      );
-    }
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
       throw new Error(`Request timed out after ${5000}ms`);
     }
+    const status = (error as { response?: { status?: number } }).response
+      ?.status;
+    logTVTime('error', 'sync', {
+      type,
+      id,
+      episode: edisodeId,
+      status,
+      error: (error as Error).message,
+    });
     throw new Error((error as Error).message);
   }
 };

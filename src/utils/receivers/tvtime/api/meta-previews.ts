@@ -14,14 +14,21 @@ import type {
 } from '../types/tvtime/library-entry';
 import type { TVTimeUserSettings } from '../types/user-settings';
 import { createTVTimeHeaders } from './headers';
+import { logTVTime } from './log';
+import { withTVTimeRefresh } from './refresh';
 import { TVTIME_BASE_URL } from './url';
 
 export const getTVTimeMetaPreviewsSeries = async (
   status: TVTimeCatalogSeriesStatus,
-  auth: NonNullable<TVTimeUserSettings['auth']>,
+  userConfig: TVTimeUserSettings,
   iOffset: number,
   iLimit: number,
 ): Promise<TVTimeLibraryEntryShow[]> => {
+  const auth = userConfig.auth;
+  if (!auth) {
+    throw new Error('User not authenticated');
+  }
+
   const fields = [
     'id',
     'name',
@@ -58,27 +65,30 @@ export const getTVTimeMetaPreviewsSeries = async (
     ];
 
     const url = `${TVTIME_BASE_URL}?${sidecar.join('&')}`;
-    try {
-      const response = await axiosCache(url, {
-        id: `tvtime-series-${auth.id}-${iOffset}-${iLimit}`,
-        method: 'GET',
-        headers: createTVTimeHeaders(auth),
-        cache: {
-          ttl: 1000 * 60 * 20,
-          interpretHeader: false,
-          staleIfError: 1000 * 60 * 5,
-        },
-      });
 
-      if (response.status !== 200) {
-        if (response.statusText)
-          throw new Error(
-            `TVTime Api returned with a ${response.status} status. ${response.statusText}`,
-          );
-        throw new Error(
-          `TVTime Api returned with a ${response.status} status. The api might be down!`,
-        );
-      }
+    try {
+      const response = await withTVTimeRefresh(
+        userConfig,
+        'meta-previews',
+        (currentAuth) =>
+          axiosCache(url, {
+            id: `tvtime-series-${currentAuth.id}-${iOffset}-${iLimit}-${offset}`,
+            method: 'GET',
+            headers: createTVTimeHeaders(currentAuth),
+            cache: {
+              ttl: 1000 * 60 * 20,
+              interpretHeader: false,
+              staleIfError: 1000 * 60 * 5,
+            },
+          }),
+      );
+
+      logTVTime('info', 'meta-previews', {
+        kind: 'series',
+        user: auth.id,
+        offset,
+        status: response.status,
+      });
 
       if (
         !response.data ||
@@ -97,6 +107,15 @@ export const getTVTimeMetaPreviewsSeries = async (
       if ((error as Error).name === 'AbortError') {
         throw new Error(`Request timed out after ${5000}ms`);
       }
+      const status = (error as { response?: { status?: number } }).response
+        ?.status;
+      logTVTime('error', 'meta-previews', {
+        kind: 'series',
+        user: auth.id,
+        offset,
+        status,
+        error: (error as Error).message,
+      });
       throw new Error((error as Error).message);
     }
   } while (results.length >= limit + offset);
@@ -119,9 +138,14 @@ export const getTVTimeMetaPreviewsSeries = async (
 
 export const getTVTimeMetaPreviewsMovie = async (
   status: TVTimeCatalogMovieStatus,
-  auth: NonNullable<TVTimeUserSettings['auth']>,
+  userConfig: TVTimeUserSettings,
   chunk: number,
 ): Promise<TVTimeLibraryEntryMovie[]> => {
+  const auth = userConfig.auth;
+  if (!auth) {
+    throw new Error('User not authenticated');
+  }
+
   const sidecar = [
     `o=https://msapi.tvtime.com/prod/v1/tracking/cgw/follows/user/${auth.id}`,
     `entity_type=movie`,
@@ -140,34 +164,37 @@ export const getTVTimeMetaPreviewsMovie = async (
     let response;
     let iteration = 0;
     do {
-      response = await axiosCache(url, {
-        id: `tvtime-movie-${status}-${auth.id}-${pagination['Page-Last-Key']}`,
-        method: 'GET',
-        headers: createTVTimeHeaders(
-          auth,
-          pagination['Page-Limit'],
-          pagination['Page-Last-Key'],
-        ),
-        cache: {
-          ttl: 1000 * 60 * 20,
-          interpretHeader: false,
-          staleIfError: 1000 * 60 * 5,
-        },
+      response = await withTVTimeRefresh(
+        userConfig,
+        'meta-previews',
+        (currentAuth) =>
+          axiosCache(url, {
+            id: `tvtime-movie-${status}-${currentAuth.id}-${pagination['Page-Last-Key']}`,
+            method: 'GET',
+            headers: createTVTimeHeaders(
+              currentAuth,
+              pagination['Page-Limit'],
+              pagination['Page-Last-Key'],
+            ),
+            cache: {
+              ttl: 1000 * 60 * 20,
+              interpretHeader: false,
+              staleIfError: 1000 * 60 * 5,
+            },
+          }),
+      );
+
+      logTVTime('info', 'meta-previews', {
+        kind: 'movie',
+        user: auth.id,
+        status_filter: status,
+        iteration,
+        status: response.status,
       });
 
       pagination['Page-Last-Key'] = response.headers['Page-Last-Key']
         ? response.headers['Page-Last-Key']
         : '';
-
-      if (response.status !== 200) {
-        if (response.statusText)
-          throw new Error(
-            `TVTime Api returned with a ${response.status} status. ${response.statusText}`,
-          );
-        throw new Error(
-          `TVTime Api returned with a ${response.status} status. The api might be down!`,
-        );
-      }
 
       if (
         !response.data ||
@@ -199,6 +226,15 @@ export const getTVTimeMetaPreviewsMovie = async (
     if ((error as Error).name === 'AbortError') {
       throw new Error(`Request timed out after ${5000}ms`);
     }
+    const responseStatus = (error as { response?: { status?: number } })
+      .response?.status;
+    logTVTime('error', 'meta-previews', {
+      kind: 'movie',
+      user: auth.id,
+      status_filter: status,
+      status: responseStatus,
+      error: (error as Error).message,
+    });
     throw new Error((error as Error).message);
   }
 };
@@ -216,14 +252,14 @@ export const getTVTimeMetaPreviews = async (
   if (type === TVTimeCatalogType.SERIES) {
     return getTVTimeMetaPreviewsSeries(
       status as TVTimeCatalogSeriesStatus,
-      userConfig.auth,
+      userConfig,
       chunk,
       perChunk,
     );
   }
   return getTVTimeMetaPreviewsMovie(
     status as TVTimeCatalogMovieStatus,
-    userConfig.auth,
+    userConfig,
     chunk,
   );
 };

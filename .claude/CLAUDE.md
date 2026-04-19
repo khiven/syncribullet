@@ -62,13 +62,25 @@ Both patches live as atomic commits on `main`, cherry-pick-able if you ever want
 
 ## TV Time module
 
-Isolated at `src/utils/receivers/tvtime/` — clean integration, but has gaps that are the target of Phase 2 work:
+Isolated at `src/utils/receivers/tvtime/`.
 
-- **Token refresh**: absent. JWT expires and user must re-login. Intervention points: `api/` + `receiver-server.ts`. Detect 401 → refresh with `jwt_refresh_token`.
+### What's implemented in this fork (Phase 2 P1)
+
+- **Structured logging** (`api/log.ts`): every TV Time HTTP call emits a single stdout line `[ts] [tvtime] [<op>] key=val ...`. Ops: `sync`, `meta-previews`, `episodes`, `refresh`. Inspect with `docker logs syncribullet | grep tvtime`.
+- **JWT refresh on 401** (`api/refresh.ts`): `withTVTimeRefresh` wraps every call. On 401 it GETs `api2.tozelabs.com/v2/user/{id}/jwt` via the sidecar proxy, sending `Authorization: Bearer <access_token>` + `jwt_refresh_token: <rt>`; the response `{id, jwt_token}` provides a fresh access token. The wrapper retries the original call once with that token. The `rt` does **not** rotate — the same refresh token keeps working until it itself expires.
+- **No persistence of the refreshed token.** Config lives encrypted in the addon URL; we cannot re-encrypt. The refreshed access token dies with the request. Net effect: once the user's stored `access_token` expires, every subsequent addon call pays `3 HTTP calls` (401 + refresh + retry) instead of 1 until the user re-logs in and mints a new URL. Acceptable for personal use; revisit if traffic grows.
+
+### Still pending (Phase 2 P2 and beyond)
+
 - **Import sync (bulk backfill)**: disabled (`importSync: false` in `constants.ts`). Endpoints already mapped in the module — flip the flag and implement the iterator.
-- **No tests.** The upstream TV Time API (`api2.tozelabs.com/v2`, `msapi.tvtime.com/v1`) is private and brittle.
+- **Tests**: none. The upstream TV Time API (`api2.tozelabs.com/v2`, `msapi.tvtime.com/v1`) is private and brittle.
+- **Persistent token cache** (SQLite / Redis): would collapse the post-expiry overhead back to 1 call per sync. Declined for now to keep the stateless architecture.
 
-Auth is username/password → JWT, sent **client-side directly to TV Time** from `src/components/forms/tvtime-login.tsx` (never through our server). Accounts created via Facebook login can't use password auth without a TV Time support ticket.
+### Auth / access
+
+Login: username/password → JWT, sent **client-side directly to TV Time** from `src/components/forms/tvtime-login.tsx` (never through our server). Stored `auth` shape: `{id, access_token, rt}` (see `types/user-settings.ts`). Accounts created via Facebook login can't use password auth without a TV Time support ticket.
+
+Known values at time of capture (2026-04-19): access JWT TTL ≈ **60 days**; refresh endpoint at `https://api2.tozelabs.com/v2/user/{id}/jwt` (GET, via sidecar proxy).
 
 ## Plan / memory locations
 
