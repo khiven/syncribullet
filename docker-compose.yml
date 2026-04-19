@@ -1,0 +1,22 @@
+# Production deploy via prebuilt multi-arch image from GHCR.
+# Image is built by .github/workflows/build.yml on push to the deploy branch.
+#
+# Local setup:
+#   cp .env.example .env
+#   # edit .env with your PRIVATE_ENCRYPTION_KEY and ORIGIN
+#   docker compose pull
+#   docker compose up -d
+#
+# To build the image locally instead of pulling, see Dockerfile.local
+# and the README.
+
+services:
+  syncribullet:
+    image: ghcr.io/khiven/syncribullet:deploy
+    container_name: syncribullet
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SYNCRIBULLET_PORT:-3050}:3000"
+    environment:
+      PRIVATE_ENCRYPTION_KEY: ${PRIVATE_ENCRYPTION_KEY}
+      ORIGIN: ${ORIGIN}
