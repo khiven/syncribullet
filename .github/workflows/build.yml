@@ -2,7 +2,7 @@ name: Build and push container image
 
 on:
   push:
-    branches: [deploy]
+    branches: [main]
     tags: ['v*']
     paths-ignore:
       - '.claude/**'
@@ -101,8 +101,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=deploy,enable=${{ github.ref == 'refs/heads/deploy' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/deploy' }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
