@@ -4,6 +4,16 @@
 #
 # Run from the repo root. Requires an `upstream` remote pointing at
 # https://github.com/aliyss/syncribullet.git
+#
+# Strategy:
+#   1. Fast-forward master to upstream/master (master stays a mirror).
+#   2. Rebase each fix/* branch onto the new master.
+#   3. Rebuild deploy from scratch: reset to master, re-merge each fix
+#      branch, then cherry-pick every deploy-only commit (anything that
+#      was on origin/deploy but not reachable from master or fix/*).
+#      This way, infra commits added directly to deploy (CI workflow,
+#      compose, docs, etc.) are preserved automatically — no per-commit
+#      allow-list to maintain.
 set -euo pipefail
 
 UPSTREAM_REMOTE=upstream
@@ -11,7 +21,6 @@ ORIGIN_REMOTE=origin
 MASTER_BRANCH=master
 DEPLOY_BRANCH=deploy
 FORK_BRANCHES=(fix/dockerfile-local-build fix/dockerfile-local-origin)
-GITIGNORE_GREP="ignore local deploy/ folder"
 
 if ! git remote get-url "$UPSTREAM_REMOTE" >/dev/null 2>&1; then
   echo "Missing '$UPSTREAM_REMOTE' remote. Add it with:"
@@ -24,16 +33,24 @@ if ! git diff-index --quiet HEAD --; then
   exit 1
 fi
 
-GITIGNORE_COMMIT=$(git log "$DEPLOY_BRANCH" --grep="$GITIGNORE_GREP" --format="%H" -n 1 || true)
-if [ -z "$GITIGNORE_COMMIT" ]; then
-  echo "Could not locate the gitignore commit on '$DEPLOY_BRANCH' (looking for: $GITIGNORE_GREP)"
-  echo "Aborting — would rebuild deploy without it."
-  exit 1
-fi
-
 echo "→ Fetching remotes"
 git fetch "$UPSTREAM_REMOTE"
 git fetch "$ORIGIN_REMOTE"
+
+# Capture deploy-only commits BEFORE rewriting branches. List non-merge
+# commits reachable from origin/deploy but not from master or any fix/*,
+# in chronological order (oldest first) for cherry-picking.
+NOT_REFS=("^$ORIGIN_REMOTE/$MASTER_BRANCH")
+for branch in "${FORK_BRANCHES[@]}"; do
+  NOT_REFS+=("^$ORIGIN_REMOTE/$branch")
+done
+
+DEPLOY_ONLY_COMMITS=$(git log "$ORIGIN_REMOTE/$DEPLOY_BRANCH" "${NOT_REFS[@]}" \
+  --no-merges --reverse --format='%H')
+
+if [ -z "$DEPLOY_ONLY_COMMITS" ]; then
+  echo "Warning: no deploy-only commits found. Proceeding anyway."
+fi
 
 echo "→ Updating $MASTER_BRANCH to $UPSTREAM_REMOTE/$MASTER_BRANCH"
 git checkout "$MASTER_BRANCH"
@@ -53,7 +70,13 @@ git reset --hard "$MASTER_BRANCH"
 for branch in "${FORK_BRANCHES[@]}"; do
   git merge --no-ff "$branch" -m "Merge branch '$branch' into $DEPLOY_BRANCH"
 done
-git cherry-pick "$GITIGNORE_COMMIT"
+
+if [ -n "$DEPLOY_ONLY_COMMITS" ]; then
+  echo "→ Cherry-picking $(echo "$DEPLOY_ONLY_COMMITS" | wc -l) deploy-only commits"
+  # shellcheck disable=SC2086
+  git cherry-pick $DEPLOY_ONLY_COMMITS
+fi
+
 git push --force-with-lease "$ORIGIN_REMOTE" "$DEPLOY_BRANCH"
 
 echo
