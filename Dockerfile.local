@@ -15,7 +15,7 @@ COPY package*.json ./
 # Install dependencies efficiently
 RUN set -eux; \
     if [ -f package-lock.json ]; then \
-        npm ci --omit=dev; \
+        npm ci; \
     else \
         npm install; \
     fi
@@ -39,7 +39,7 @@ RUN set -eux; \
     fi
 
 # Build the app
-RUN npm run build
+RUN npm run build && npm prune --omit=dev
 
 
 # --- Runtime stage ---
