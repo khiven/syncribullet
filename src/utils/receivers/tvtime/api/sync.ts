@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { axiosInstance } from '~/utils/axios/cache';
+import { axiosCache } from '~/utils/axios/cache';
 
 import { TVTimeCatalogType } from '../types/catalog/catalog-type';
 import type { TVTimeUserSettings } from '../types/user-settings';
@@ -26,7 +26,7 @@ export const syncTVTimeMetaObject = async (
 
   try {
     await withTVTimeRefresh(userConfig, 'sync', async (auth) => {
-      const response = await axiosInstance(url, {
+      const response = await axiosCache(url, {
         method: 'POST',
         cache: false,
         headers: createTVTimeHeaders(auth),

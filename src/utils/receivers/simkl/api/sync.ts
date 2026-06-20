@@ -1,4 +1,4 @@
-import { axiosInstance } from '~/utils/axios/cache';
+import { axiosCache } from '~/utils/axios/cache';
 import type { IDs } from '~/utils/receiver/types/id';
 
 import type { SimklUserSettings } from '../types/user-settings';
@@ -45,7 +45,7 @@ export async function syncSimklMetaObject(
   }
 
   try {
-    const response = await axiosInstance(`https://api.simkl.com/sync/history`, {
+    const response = await axiosCache(`https://api.simkl.com/sync/history`, {
       method: 'POST',
       cache: false,
       headers: createSimklHeaders(userConfig.auth),

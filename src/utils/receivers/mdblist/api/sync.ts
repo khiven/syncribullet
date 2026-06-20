@@ -1,4 +1,4 @@
-import { axiosInstance } from '~/utils/axios/cache';
+import { axiosCache } from '~/utils/axios/cache';
 import type { IDs } from '~/utils/receiver/types/id';
 
 import type { MDBListUserSettings } from '../types/user-settings';
@@ -55,7 +55,7 @@ export async function syncMDBListMetaObject(
   }
 
   try {
-    const response = await axiosInstance(
+    const response = await axiosCache(
       `https://api.mdblist.com/sync/watched`,
       {
         method: 'POST',
