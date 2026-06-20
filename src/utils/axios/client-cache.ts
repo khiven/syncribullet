@@ -6,6 +6,11 @@ export const axiosInstance = Axios.create();
 
 let sessionCache: AxiosCacheInstance | undefined = undefined;
 
+const debug =
+  import.meta.env.PUBLIC_AXIOS_CACHE_DEBUG === '1'
+    ? (x: unknown) => console.log('[axios-cache]', JSON.stringify(x))
+    : undefined;
+
 export const axiosSessionCache = () => {
   if (sessionCache) {
     return sessionCache;
@@ -14,7 +19,7 @@ export const axiosSessionCache = () => {
     staleIfError: 5 * 60 * 1000,
     methods: ['get', 'post'],
     storage: buildWebStorage(sessionStorage),
-    debug: (x) => console.log(x),
+    ...(debug ? { debug } : {}),
   });
   return sessionCache;
 };

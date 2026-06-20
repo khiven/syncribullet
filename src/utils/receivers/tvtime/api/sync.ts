@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 import { axiosInstance } from '~/utils/axios/cache';
 
 import { TVTimeCatalogType } from '../types/catalog/catalog-type';
@@ -26,6 +28,7 @@ export const syncTVTimeMetaObject = async (
     await withTVTimeRefresh(userConfig, 'sync', async (auth) => {
       const response = await axiosInstance(url, {
         method: 'POST',
+        cache: false,
         headers: createTVTimeHeaders(auth),
       });
       logTVTime('info', 'sync', {
@@ -39,15 +42,18 @@ export const syncTVTimeMetaObject = async (
     if ((error as Error).name === 'AbortError') {
       throw new Error(`Request timed out after ${5000}ms`);
     }
-    const status = (error as { response?: { status?: number } }).response
-      ?.status;
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    const code = axios.isAxiosError(error)
+      ? error.code
+      : (error as { code?: string })?.code;
     logTVTime('error', 'sync', {
       type,
       id,
       episode: edisodeId,
       status,
+      code,
       error: (error as Error).message,
     });
-    throw new Error((error as Error).message);
+    throw error;
   }
 };

@@ -88,19 +88,37 @@ export const onGet: RequestHandler = async ({
       )),
     };
   } else if (ids.ids.imdb) {
-    ids.ids = {
-      ...ids.ids,
-      ...(await getMappingIdsHaglundIMDB(
+    // Each mapping source is fail-soft: a single source going down (auth
+    // expired, network blip, upstream 5xx) must not 500 the subtitles
+    // route and break play in Stremio. Missing mapping IDs simply mean
+    // the matching receivers skip the sync attempt for this item.
+    let haglundIds: Partial<IDs> = {};
+    try {
+      haglundIds = await getMappingIdsHaglundIMDB(
         ids.ids.imdb.toString(),
         ids.count?.season,
-      )),
-      ...(receivers.tvtime
-        ? await getMappingIdsTVTimeIMDB(
-            ids.ids.imdb.toString(),
-            receivers.tvtime.receiverTypeReverseMapping[potentialReceiverType],
-            receivers.tvtime.userSettings,
-          )
-        : {}),
+      );
+    } catch (e) {
+      console.error('haglund mapping failed:', (e as Error).message);
+    }
+
+    let tvtimeIds: Partial<IDs> = {};
+    if (receivers.tvtime) {
+      try {
+        tvtimeIds = await getMappingIdsTVTimeIMDB(
+          ids.ids.imdb.toString(),
+          receivers.tvtime.receiverTypeReverseMapping[potentialReceiverType],
+          receivers.tvtime.userSettings,
+        );
+      } catch (e) {
+        console.error('tvtime mapping failed:', (e as Error).message);
+      }
+    }
+
+    ids.ids = {
+      ...ids.ids,
+      ...haglundIds,
+      ...tvtimeIds,
     };
   }
 

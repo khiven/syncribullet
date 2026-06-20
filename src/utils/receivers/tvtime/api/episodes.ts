@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 import { axiosInstance } from '~/utils/axios/cache';
 import type { UserSettings } from '~/utils/receiver/types/user-settings/settings';
 
@@ -48,15 +50,18 @@ export const episodesTVTimeMetaObject = async (
     if ((error as Error).name === 'AbortError') {
       throw new Error(`Request timed out after ${5000}ms`);
     }
-    const status = (error as { response?: { status?: number } }).response
-      ?.status;
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    const code = axios.isAxiosError(error)
+      ? error.code
+      : (error as { code?: string })?.code;
     logTVTime('error', 'episodes', {
       series: id,
       season: count.season,
       episode: count.episode,
       status,
+      code,
       error: (error as Error).message,
     });
-    throw new Error((error as Error).message);
+    throw error;
   }
 };

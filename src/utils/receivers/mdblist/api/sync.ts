@@ -59,6 +59,7 @@ export async function syncMDBListMetaObject(
       `https://api.mdblist.com/sync/watched`,
       {
         method: 'POST',
+        cache: false,
         params: {
           apikey,
         },

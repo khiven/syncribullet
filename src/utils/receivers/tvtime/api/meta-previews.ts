@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 import { axiosCache } from '~/utils/axios/cache';
 
 import type {
@@ -107,16 +109,19 @@ export const getTVTimeMetaPreviewsSeries = async (
       if ((error as Error).name === 'AbortError') {
         throw new Error(`Request timed out after ${5000}ms`);
       }
-      const status = (error as { response?: { status?: number } }).response
-        ?.status;
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      const code = axios.isAxiosError(error)
+        ? error.code
+        : (error as { code?: string })?.code;
       logTVTime('error', 'meta-previews', {
         kind: 'series',
         user: auth.id,
         offset,
         status,
+        code,
         error: (error as Error).message,
       });
-      throw new Error((error as Error).message);
+      throw error;
     }
   } while (results.length >= limit + offset);
 
@@ -226,16 +231,21 @@ export const getTVTimeMetaPreviewsMovie = async (
     if ((error as Error).name === 'AbortError') {
       throw new Error(`Request timed out after ${5000}ms`);
     }
-    const responseStatus = (error as { response?: { status?: number } })
-      .response?.status;
+    const responseStatus = axios.isAxiosError(error)
+      ? error.response?.status
+      : undefined;
+    const code = axios.isAxiosError(error)
+      ? error.code
+      : (error as { code?: string })?.code;
     logTVTime('error', 'meta-previews', {
       kind: 'movie',
       user: auth.id,
       status_filter: status,
       status: responseStatus,
+      code,
       error: (error as Error).message,
     });
-    throw new Error((error as Error).message);
+    throw error;
   }
 };
 

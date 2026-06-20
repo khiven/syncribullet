@@ -47,6 +47,7 @@ export async function syncSimklMetaObject(
   try {
     const response = await axiosInstance(`https://api.simkl.com/sync/history`, {
       method: 'POST',
+      cache: false,
       headers: createSimklHeaders(userConfig.auth),
       data,
     });
